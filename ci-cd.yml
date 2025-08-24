@@ -1,0 +1,58 @@
+name: CI-CD
+
+on:
+  push:
+    branches: [ "main" ]
+
+env:
+  REGISTRY_USER: ${{ secrets.afshamuskan }}
+  REGISTRY_PASS: ${{ secrets.Afsha!Sky123 }}
+  DOCKERHUB_ORG: ${{ secrets.afshamuskan }} # reuse for image names
+  VM_HOST: ${{ secrets.VM_HOST }}
+  VM_USER: ${{ secrets.VM_USER }}
+  VM_KEY:  ${{ secrets.VM_SSH_KEY }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        run: echo "$REGISTRY_PASS" | docker login -u "$REGISTRY_USER" --password-stdin
+
+      - name: Build & Push Backend
+        run: |
+          docker build -t $DOCKERHUB_ORG/mean-backend:latest ./backend
+          docker push $DOCKERHUB_ORG/mean-backend:latest
+
+      - name: Build & Push Frontend
+        run: |
+          docker build -t $DOCKERHUB_ORG/mean-frontend:latest ./frontend
+          docker push $DOCKERHUB_ORG/mean-frontend:latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (for compose and nginx files)
+        uses: actions/checkout@v4
+
+      - name: SSH - Pull & Restart on VM
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ env.VM_HOST }}
+          username: ${{ env.VM_USER }}
+          key: ${{ env.VM_KEY }}
+          script: |
+            set -e
+            if [ ! -d ~/crud-dd-task-mean-app ]; then
+              git clone https://github.com/${{ github.repository }} ~/crud-dd-task-mean-app
+            fi
+            cd ~/crud-dd-task-mean-app
+            git pull
+            # Export org for compose variable
+            export afshamuskan=$DOCKERHUB_ORG
+            docker compose pull || docker-compose pull
+            docker compose up -d || docker-compose up -d
