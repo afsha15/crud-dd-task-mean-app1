@@ -1,11 +1,14 @@
-# backend/Dockerfile
-FROM node:18-alpine
+# frontend/Dockerfile
+# Build Angular app
+FROM node:18-alpine AS build
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --omit=dev || npm install --only=production
+RUN npm ci || npm install
 COPY . .
-ENV PORT=8080
-# Allow overriding Mongo URL at runtime (compose passes it)
-ENV MONGO_URL=mongodb://mongo:27017/dd_db
-EXPOSE 8080
-CMD ["node", "server.js"]
+RUN npm run build
+
+# Serve using Nginx
+FROM nginx:alpine
+COPY --from=build /app/dist/angular-15-crud /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
